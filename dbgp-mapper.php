@@ -110,7 +110,8 @@ class DBGp_Mapper {
 
 			$setBreakpointsInFiles = array($path);
 
-			$contexts = array('Development', 'Testing', 'Production');
+				// TODO: currently we only support ONE context!!
+			$contexts = array();
 			if (strlen(self::$additionalContexts) > 0) {
 				foreach (explode(',', self::$additionalContexts) as $ctx) {
 					$contexts[] = $ctx;
@@ -119,7 +120,12 @@ class DBGp_Mapper {
 
 			foreach ($contexts as $context) {
 				$codeCacheFileName = $flow3BaseUri . '/Data/Temporary/' . $context . '/Cache/Code/FLOW3_Object_Classes/' . str_replace('\\', '_', $className) . '_Original.php';
-				$setBreakpointsInFiles[] = $codeCacheFileName;
+
+				if (strpos('@FLOW3\\', file_get_contents($path)) !== FALSE || file_exists($codeCacheFileName)) {
+					$setBreakpointsInFiles = array($codeCacheFileName);
+					// TODO: currently we only support ONE context
+				}
+
 				self::$mappings[$codeCacheFileName] = $path;
 			}
 
@@ -327,11 +333,18 @@ class DBGp_Mapper {
 		$help = array(
 			$argv[0] . " - DBGp Path Mapper <http://blog.netxus.es>, adjusted by Sebastian Kurfürst for FLOW3 (http://sandstorm-media.de)",
 			"",
+			"If you set a breakpoint in one of FLOW3-managed PHP classes, this proxy",
+			"will instead set the breakpoint in the proxy class, if that makes sense.",
+			"Thus, you can work with the debugger as if proxy classes would not exist.",
+			"",
 			"Usage:",
-			"\t" . $argv[0],
+			"\t" . $argv[0] . " -c CONTEXTNAME",
 			"",
 			"With the default configuration, xdebug needs to connect to port 9000,",
 			"and your IDE should listen on port 9001.",
+			"",
+			"You need to specify the context your FLOW3 runs in, so Testing for functional tests",
+			"and Development/Production for real-world runs.",
 			"",
 			"Options:",
 			"\t-h           Show this help and exit",
@@ -341,12 +354,19 @@ class DBGp_Mapper {
 			"\t-I ip        Bind to this ip address (default: all interfaces)",
 			"\t-P port      Bind to this port number (default: 9000)",
 			"\t-f           Run in foreground (default: disabled)",
-			"\t-c Development/Foo,Production/Bar",
-			"\t             comma-separated list of additional contexts to support.",
+			"\t-c Development",
+			"\t             The context to run as",
 			"\t             Note: There is NO SPACE ALLOWED between the additional contexts.",
 			"\t-d           enable debugging mode",
 			"",
-			""
+			"",
+			"Note: We use the following heuristic to determine whether the breakpoints",
+			"should happen in the original file or the cached one:",
+			"  - if a file exists inside the cache directory, use this one",
+			"  - if the code file contains a FLOW3 annotation, we use a cached file",
+			"",
+			"This heuristic might especially be wrong in case the cache file does not exist yet,",
+			"i.e. when the caches are empty on first run."
 		);
 
 		echo implode(PHP_EOL, $help);
@@ -422,9 +442,7 @@ if (!$args['f']) {
 	echo "Initializing daemon...\n";
 	DBGp_Mapper::daemonize();
 }
-
 DBGp_Mapper::$debug = $args['d'];
-var_dump("Debugging: ", DBGp_Mapper::$debug);
 DBGp_Mapper::$additionalContexts = $args['c'];
 # run the process to listen for connections
 DBGp_Mapper::run($args['i'], $args['p'], $args['I'], $args['P']);
