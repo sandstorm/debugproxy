@@ -45,6 +45,8 @@ class DBGp_Mapper {
 	static $ideSocket = null;
 	static $mappings = array();
 
+	static public $debug = FALSE;
+
 	static public $additionalContexts = '';
 
 	static function addMapping($idePath, $dbgPath) {
@@ -246,9 +248,11 @@ class DBGp_Mapper {
 							}
 						}
 
-						//echo "\n\n\n TO SERVER:\n";
-						//echo $buf;
-						//echo "\n\n";
+						if (self::$debug) {
+							echo "\n\n\n TO SERVER:\n";
+							echo $buf;
+							echo "\n\n";
+						}
 
 						socket_write(self::$dbgSocket, $buf);
 
@@ -302,9 +306,11 @@ class DBGp_Mapper {
 					$xml = trim($sxe->asXML(), " \t\n\r");
 					$xml = (strlen($xml)) . "\0" . $xml . "\0";
 
-					//echo "\n\n\n SENDING TO IDE: ";
-					//echo $xml;
-					//echo "\n\n\n";
+					if (self::$debug) {
+						echo "\n\n\n SENDING TO IDE: ";
+						echo $xml;
+						echo "\n\n\n";
+					}
 
 					socket_write(self::$ideSocket, $xml);
 				}
@@ -338,6 +344,7 @@ class DBGp_Mapper {
 			"\t-c Development/Foo,Production/Bar",
 			"\t             comma-separated list of additional contexts to support.",
 			"\t             Note: There is NO SPACE ALLOWED between the additional contexts.",
+			"\t-d           enable debugging mode",
 			"",
 			""
 		);
@@ -347,7 +354,7 @@ class DBGp_Mapper {
 
 	static function processArguments() {
 		if (function_exists('getopt')) {
-			$r = getopt('hVfi:p:I:P:c:');
+			$r = getopt('dhVfi:p:I:P:c:');
 		} else {
 			$args = implode(' ', $GLOBALS['argv']);
 			$r = self::parseCommandArguments($args);
@@ -367,7 +374,8 @@ class DBGp_Mapper {
 			'I' => isset($r['I']) ? $r['I'] : '0.0.0.0',
 			'P' => isset($r['P']) ? $r['P'] : '9000',
 			'f' => isset($r['f']) ? true : false,
-			'c' => isset($r['c']) ? $r['c'] : ''
+			'c' => isset($r['c']) ? $r['c'] : '',
+			'd' => isset($r['d']) ? true : false
 		);
 	}
 
@@ -415,6 +423,8 @@ if (!$args['f']) {
 	DBGp_Mapper::daemonize();
 }
 
+DBGp_Mapper::$debug = $args['d'];
+var_dump("Debugging: ", DBGp_Mapper::$debug);
 DBGp_Mapper::$additionalContexts = $args['c'];
 # run the process to listen for connections
 DBGp_Mapper::run($args['i'], $args['p'], $args['I'], $args['P']);
