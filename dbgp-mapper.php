@@ -341,7 +341,7 @@ class DBGp_Mapper {
 			"\t" . $argv[0] . " -c CONTEXTNAME",
 			"",
 			"With the default configuration, xdebug needs to connect to port 9000,",
-			"and your IDE should listen on port 9001.",
+			"and your IDE should listen on port 9010.",
 			"",
 			"You need to specify the context your FLOW3 runs in, so Testing for functional tests",
 			"and Development/Production for real-world runs.",
@@ -350,7 +350,7 @@ class DBGp_Mapper {
 			"\t-h           Show this help and exit",
 			"\t-V           Show version and exit",
 			"\t-i hostname  Client/IDE ip or host address (default: 127.0.0.1)",
-			"\t-p port      Client/IDE port number (default: 9001)",
+			"\t-p port      Client/IDE port number (default: 9010)",
 			"\t-I ip        Bind to this ip address (default: all interfaces)",
 			"\t-P port      Bind to this port number (default: 9000)",
 			"\t-f           Run in foreground (default: disabled)",
@@ -390,7 +390,7 @@ class DBGp_Mapper {
 
 		return array(
 			'i' => isset($r['i']) ? $r['i'] : '127.0.0.1',
-			'p' => isset($r['p']) ? $r['p'] : '9001',
+			'p' => isset($r['p']) ? $r['p'] : '9010',
 			'I' => isset($r['I']) ? $r['I'] : '0.0.0.0',
 			'P' => isset($r['P']) ? $r['P'] : '9000',
 			'f' => isset($r['f']) ? true : false,
