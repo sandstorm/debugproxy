@@ -34,6 +34,7 @@
   Copyright:
 
   copyright (c) 2007 Ivan Montes <http://blog.netxus.es>
+  adjustments 2012 by Sebastian Kurfürst <http://sandstorm-media.de>
  */
 
 class DBGp_Mapper {
@@ -43,6 +44,8 @@ class DBGp_Mapper {
 	static $dbgSocket = null;
 	static $ideSocket = null;
 	static $mappings = array();
+
+	static public $additionalContexts = '';
 
 	static function addMapping($idePath, $dbgPath) {
 		self::$mappings[$idePath] = $dbgPath;
@@ -97,33 +100,42 @@ class DBGp_Mapper {
 		$className = str_replace(array('.', '/'), '\\', $classPath);
 		return array($flow3BaseUri, $className);
 	}
+
 	static function map($path) {
 		if (strpos($path, '/Packages/') !== FALSE) {
 			// We assume it's a FLOW3 class where a breakpoint was set
-			$fileContents = file_get_contents($path);
 			list ($flow3BaseUri, $className) = self::constructClassNameFromPath($path);
 
-			// TODO: Testing / Development!
-			$codeCacheFileName = $flow3BaseUri . '/Data/Temporary/Testing/Cache/Code/FLOW3_Object_Classes/' . str_replace('\\', '_', $className) . '_Original.php';
-			var_dump($flow3BaseUri, $className, $codeCacheFileName);
+			$setBreakpointsInFiles = array($path);
 
-			if (strpos($fileContents, '@FLOW3\\') !== FALSE || file_exists($codeCacheFileName)) {
-				self::$mappings[$path] = $codeCacheFileName;
-				return $codeCacheFileName;
+			$contexts = array('Development', 'Testing', 'Production');
+			if (strlen(self::$additionalContexts) > 0) {
+				foreach (explode(',', self::$additionalContexts) as $ctx) {
+					$contexts[] = $ctx;
+				}
 			}
+
+			foreach ($contexts as $context) {
+				$codeCacheFileName = $flow3BaseUri . '/Data/Temporary/' . $context . '/Cache/Code/FLOW3_Object_Classes/' . str_replace('\\', '_', $className) . '_Original.php';
+				$setBreakpointsInFiles[] = $codeCacheFileName;
+				self::$mappings[$codeCacheFileName] = $path;
+			}
+
+			return $setBreakpointsInFiles;
+		} else {
+			return array($path);
 		}
-		return $path;
 	}
 
 	static function unmap($path) {
 		foreach (self::$mappings as $k => $v) {
-			$path = str_ireplace($v, $k, $path);
+			$path = str_ireplace($k, $v, $path);
 		}
-		//$path = str_ireplace( 'file:///', 'file://192.168.40.1/', $path );
+
 		return $path;
 	}
 
-	static function run($ideHost, $idePort = '9000', $bindIp = '0.0.0.0', $bindPort = '9000') {
+	static function run($ideHost, $idePort, $bindIp, $bindPort) {
 		# Initialize the listenning socket
 		self::$listenSocket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP)
 				or self::shutdown('Unable to create listenning socket: ' . socket_strerror(socket_last_error()));
@@ -221,17 +233,22 @@ class DBGp_Mapper {
 								$command = array_shift($parts);
 								if ($command === 'breakpoint_set') {
 									$args = self::parseCommandArguments(implode(' ', $parts));
-									$args['f'] = self::map($args['f']);
-									$cmd = $command . ' ' . self::buildCommandArguments($args);
+									$files = self::map($args['f']);
+									foreach ($files as $file) {
+										$args['f'] = $file;
+										$cmd = $command . ' ' . self::buildCommandArguments($args);
+										$buf .= $cmd . "\0";
+									}
+
+								} else {
+									$buf .= $cmd . "\0";
 								}
-								//echo "IDE: $cmd<br/>";
-								$buf .= $cmd . "\0";
 							}
 						}
 
-						echo "\n\n\n TO SERVER:\n";
-						echo $buf;
-						echo "\n\n";
+						//echo "\n\n\n TO SERVER:\n";
+						//echo $buf;
+						//echo "\n\n";
 
 						socket_write(self::$dbgSocket, $buf);
 
@@ -285,9 +302,9 @@ class DBGp_Mapper {
 					$xml = trim($sxe->asXML(), " \t\n\r");
 					$xml = (strlen($xml)) . "\0" . $xml . "\0";
 
-					echo "\n\n\n SENDING TO IDE: ";
-					echo $xml;
-					echo "\n\n\n";
+					//echo "\n\n\n SENDING TO IDE: ";
+					//echo $xml;
+					//echo "\n\n\n";
 
 					socket_write(self::$ideSocket, $xml);
 				}
@@ -302,21 +319,25 @@ class DBGp_Mapper {
 		global $argv;
 
 		$help = array(
-			$argv[0] . " - DBGp Path Mapper <http://blog.netxus.es>",
+			$argv[0] . " - DBGp Path Mapper <http://blog.netxus.es>, adjusted by Sebastian Kurfürst for FLOW3 (http://sandstorm-media.de)",
 			"",
 			"Usage:",
-			"\t" . $argv[0] . " -i CLIENT_IP -m MAPPINGS_FILE",
+			"\t" . $argv[0],
+			"",
+			"With the default configuration, xdebug needs to connect to port 9000,",
+			"and your IDE should listen on port 9001.",
 			"",
 			"Options:",
 			"\t-h           Show this help and exit",
-			"\t-c           FLOW3 context to intercept",
 			"\t-V           Show version and exit",
-			"\t-m mappings  The path mappings file to load",
-			"\t-i hostname  Client ip or host address",
-			"\t-p port      Client port number (default: 9000)",
+			"\t-i hostname  Client/IDE ip or host address (default: 127.0.0.1)",
+			"\t-p port      Client/IDE port number (default: 9001)",
 			"\t-I ip        Bind to this ip address (default: all interfaces)",
 			"\t-P port      Bind to this port number (default: 9000)",
 			"\t-f           Run in foreground (default: disabled)",
+			"\t-c Development/Foo,Production/Bar",
+			"\t             comma-separated list of additional contexts to support.",
+			"\t             Note: There is NO SPACE ALLOWED between the additional contexts.",
 			"",
 			""
 		);
@@ -326,51 +347,27 @@ class DBGp_Mapper {
 
 	static function processArguments() {
 		if (function_exists('getopt')) {
-			$r = getopt('hVfc:i:p:I:P:m:');
+			$r = getopt('hVfi:p:I:P:c:');
 		} else {
 			$args = implode(' ', $GLOBALS['argv']);
 			$r = self::parseCommandArguments($args);
 		}
 
 		if (isset($r['V'])) {
-			echo "DBGp Path Mapper v1.0 - 25th November 2007\n";
+			echo "DBGp Path Mapper v2.0 - FLOW3 version of 09.08.2012\n";
 			exit();
 		} else if (isset($r['h'])) {
 			self::help();
 			exit();
 		}
 
-		if (!isset($r['i']) || !isset($r['m'])) {
-			self::help();
-			exit;
-		}
-
-		$mappings = @file_get_contents($r['m']);
-		if ($mappings === false) {
-			echo "Error: Unable to load the mappings file\n";
-			exit();
-		}
-
-		$cnt = 0;
-		$maps = explode("\n", $mappings);
-		foreach ($maps as $map) {
-			$map = trim($map);
-			if (empty($map) || strpos($map, '#') === 0)
-				continue;
-			$uris = explode('=>', $map);
-			DBGp_Mapper::addMapping(trim($uris[1]), trim($uris[0]));
-			$cnt++;
-		}
-		if (!$cnt) {
-			echo "Notice: no path mappings loaded\n";
-		}
-
 		return array(
-			'i' => $r['i'],
-			'p' => isset($r['p']) ? $r['p'] : '9000',
+			'i' => isset($r['i']) ? $r['i'] : '127.0.0.1',
+			'p' => isset($r['p']) ? $r['p'] : '9001',
 			'I' => isset($r['I']) ? $r['I'] : '0.0.0.0',
 			'P' => isset($r['P']) ? $r['P'] : '9000',
 			'f' => isset($r['f']) ? true : false,
+			'c' => isset($r['c']) ? $r['c'] : ''
 		);
 	}
 
@@ -418,5 +415,6 @@ if (!$args['f']) {
 	DBGp_Mapper::daemonize();
 }
 
+DBGp_Mapper::$additionalContexts = $args['c'];
 # run the process to listen for connections
 DBGp_Mapper::run($args['i'], $args['p'], $args['I'], $args['P']);
