@@ -97,16 +97,16 @@ class DBGp_Mapper {
 	static protected function constructClassNameFromPath($path) {
 		$matches = array();
 		preg_match('#(.*?)/Packages/(.*?)/(.*).php#', $path, $matches);
-		$flow3BaseUri = $matches[1];
-		$classPath = str_replace('Classes/', '', $matches[3]);
+		$flowBaseUri = $matches[1];
+		$classPath = preg_replace('#.*[^/]+/Classes/#', '', $matches[3]);
 		$className = str_replace(array('.', '/'), '\\', $classPath);
-		return array($flow3BaseUri, $className);
+		return array($flowBaseUri, $className);
 	}
 
 	static function map($path) {
 		if (strpos($path, '/Packages/') !== FALSE) {
-			// We assume it's a FLOW3 class where a breakpoint was set
-			list ($flow3BaseUri, $className) = self::constructClassNameFromPath($path);
+			// We assume it's a Flow class where a breakpoint was set
+			list ($flowBaseUri, $className) = self::constructClassNameFromPath($path);
 
 			$setBreakpointsInFiles = array($path);
 
@@ -119,9 +119,9 @@ class DBGp_Mapper {
 			}
 
 			foreach ($contexts as $context) {
-				$codeCacheFileName = $flow3BaseUri . '/Data/Temporary/' . $context . '/Cache/Code/FLOW3_Object_Classes/' . str_replace('\\', '_', $className) . '_Original.php';
+				$codeCacheFileName = $flowBaseUri . '/Data/Temporary/' . $context . '/Cache/Code/Flow_Object_Classes/' . str_replace('\\', '_', $className) . '_Original.php';
 
-				if (strpos('@FLOW3\\', file_get_contents($path)) !== FALSE || file_exists($codeCacheFileName)) {
+				if (strpos('@Flow\\', file_get_contents($path)) !== FALSE || file_exists($codeCacheFileName)) {
 					$setBreakpointsInFiles = array($codeCacheFileName);
 					// TODO: currently we only support ONE context
 				}
@@ -331,9 +331,9 @@ class DBGp_Mapper {
 		global $argv;
 
 		$help = array(
-			$argv[0] . " - DBGp Path Mapper <http://blog.netxus.es>, adjusted by Sebastian Kurfürst for FLOW3 (http://sandstorm-media.de)",
+			$argv[0] . " - DBGp Path Mapper <http://blog.netxus.es>, adjusted by Sebastian Kurfürst for Flow (http://sandstorm-media.de)",
 			"",
-			"If you set a breakpoint in one of FLOW3-managed PHP classes, this proxy",
+			"If you set a breakpoint in one of Flow-managed PHP classes, this proxy",
 			"will instead set the breakpoint in the proxy class, if that makes sense.",
 			"Thus, you can work with the debugger as if proxy classes would not exist.",
 			"",
@@ -343,7 +343,7 @@ class DBGp_Mapper {
 			"With the default configuration, xdebug needs to connect to port 9000,",
 			"and your IDE should listen on port 9010.",
 			"",
-			"You need to specify the context your FLOW3 runs in, so Testing for functional tests",
+			"You need to specify the context your Flow runs in, so Testing for functional tests",
 			"and Development/Production for real-world runs.",
 			"",
 			"Options:",
@@ -363,7 +363,7 @@ class DBGp_Mapper {
 			"Note: We use the following heuristic to determine whether the breakpoints",
 			"should happen in the original file or the cached one:",
 			"  - if a file exists inside the cache directory, use this one",
-			"  - if the code file contains a FLOW3 annotation, we use a cached file",
+			"  - if the code file contains a Flow annotation, we use a cached file",
 			"",
 			"This heuristic might especially be wrong in case the cache file does not exist yet,",
 			"i.e. when the caches are empty on first run."
@@ -381,7 +381,7 @@ class DBGp_Mapper {
 		}
 
 		if (isset($r['V'])) {
-			echo "DBGp Path Mapper v2.0 - FLOW3 version of 09.08.2012\n";
+			echo "DBGp Path Mapper v2.0 - Flow version of 09.08.2012\n";
 			exit();
 		} else if (isset($r['h'])) {
 			self::help();
