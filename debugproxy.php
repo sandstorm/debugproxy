@@ -47,7 +47,7 @@ class DBGp_Mapper {
 
 	static public $debug = FALSE;
 
-	static public $additionalContexts = '';
+	static public $flowContext = '';
 
 	static function addMapping($idePath, $dbgPath) {
 		self::$mappings[$idePath] = $dbgPath;
@@ -96,10 +96,9 @@ class DBGp_Mapper {
 
 	static protected function constructClassNameFromPath($path) {
 		$matches = array();
-		preg_match('#(.*?)/Packages/(.*?)/(.*).php#', $path, $matches);
+		preg_match('#(.*?)/Packages/(.*?)/Classes/(.*).php#', $path, $matches);
 		$flowBaseUri = $matches[1];
-		$classPath = preg_replace('#.*[^/]+/Classes/#', '', $matches[3]);
-		$className = str_replace(array('.', '/'), '\\', $classPath);
+		$className = str_replace(array('.', '/'), '\\', $matches[3]);
 		return array($flowBaseUri, $className);
 	}
 
@@ -107,32 +106,18 @@ class DBGp_Mapper {
 		if (strpos($path, '/Packages/') !== FALSE) {
 			// We assume it's a Flow class where a breakpoint was set
 			list ($flowBaseUri, $className) = self::constructClassNameFromPath($path);
-
 			$setBreakpointsInFiles = array($path);
 
-				// TODO: currently we only support ONE context!!
-			$contexts = array();
-			if (strlen(self::$additionalContexts) > 0) {
-				foreach (explode(',', self::$additionalContexts) as $ctx) {
-					$contexts[] = $ctx;
-				}
-			}
 
-			foreach ($contexts as $context) {
-				$codeCacheFileName = $flowBaseUri . '/Data/Temporary/' . $context . '/Cache/Code/Flow_Object_Classes/' . str_replace('\\', '_', $className) . '_Original.php';
+			$codeCacheFileName = $flowBaseUri . '/Data/Temporary/' . self::$flowContext . '/Cache/Code/Flow_Object_Classes/' . str_replace('\\', '_', $className) . '.php';
 
-				if (strpos('@Flow\\', file_get_contents($path)) !== FALSE || file_exists($codeCacheFileName)) {
-					$setBreakpointsInFiles = array($codeCacheFileName);
-					// TODO: currently we only support ONE context
-				}
-
+			if (strpos('@Flow\\', file_get_contents($path)) !== FALSE || file_exists($codeCacheFileName)) {
 				self::$mappings[$codeCacheFileName] = $path;
+				return $codeCacheFileName;
 			}
-
-			return $setBreakpointsInFiles;
-		} else {
-			return array($path);
 		}
+
+		return $path;
 	}
 
 	static function unmap($path) {
@@ -165,7 +150,7 @@ class DBGp_Mapper {
 			$toRead = $sockets;
 
 			# get a list of all clients which have data to be read from
-			if (socket_select($toRead, $write = null, $except = null, 0, 10) < 1) {
+			if (socket_select($toRead, $write = null, $except = null, 10) < 1) {
 				continue;
 			}
 
@@ -241,12 +226,11 @@ class DBGp_Mapper {
 								$command = array_shift($parts);
 								if ($command === 'breakpoint_set') {
 									$args = self::parseCommandArguments(implode(' ', $parts));
-									$files = self::map($args['f']);
-									foreach ($files as $file) {
-										$args['f'] = $file;
-										$cmd = $command . ' ' . self::buildCommandArguments($args);
-										$buf .= $cmd . "\0";
-									}
+
+									$file = self::map($args['f']);
+									$args['f'] = $file;
+									$cmd = $command . ' ' . self::buildCommandArguments($args);
+									$buf .= $cmd . "\0";
 
 								} else {
 									$buf .= $cmd . "\0";
@@ -256,7 +240,7 @@ class DBGp_Mapper {
 
 						if (self::$debug) {
 							echo "\n\n\n TO SERVER:\n";
-							echo $buf;
+							echo var_dump($buf);
 							echo "\n\n";
 						}
 
@@ -356,7 +340,6 @@ class DBGp_Mapper {
 			"\t-f           Run in foreground (default: disabled)",
 			"\t-c Development",
 			"\t             The context to run as",
-			"\t             Note: There is NO SPACE ALLOWED between the additional contexts.",
 			"\t-d           enable debugging mode",
 			"",
 			"",
@@ -443,6 +426,6 @@ if (!$args['f']) {
 	DBGp_Mapper::daemonize();
 }
 DBGp_Mapper::$debug = $args['d'];
-DBGp_Mapper::$additionalContexts = $args['c'];
+DBGp_Mapper::$flowContext = $args['c'];
 # run the process to listen for connections
 DBGp_Mapper::run($args['i'], $args['p'], $args['I'], $args['P']);
